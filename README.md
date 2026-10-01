@@ -137,6 +137,14 @@ Library-Information-System/
 
 ## Deploy to Vercel
 
+**Quickest (no database setup):** import the repo in Vercel, add `LIS_SECRET`
+(below) and deploy. Without `DATABASE_URL` the app keeps a temporary SQLite
+database in `/tmp` and loads the demo data itself. Changes made on the site last
+while it is active; after it has been idle, Vercel starts it fresh with clean
+demo data.
+
+**Permanent data (Supabase):**
+
 1. **Database.** In Supabase, open *Project Settings > Database > Connection string*,
    choose **Transaction pooler**, and copy the URI (replace `[YOUR-PASSWORD]`).
 2. **Load the demo data** into Supabase from your computer:

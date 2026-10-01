@@ -45,11 +45,9 @@ if database_url:
     # Serverless hosts (Vercel) reuse idle connections; check them before use
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 280}
 elif os.environ.get("VERCEL"):
-    # Vercel's filesystem is read-only, so SQLite can't work there
-    raise RuntimeError(
-        "DATABASE_URL is not set. Add your Supabase connection string in "
-        "Vercel > Project > Settings > Environment Variables."
-    )
+    # Vercel's filesystem is read-only except /tmp, and /tmp is wiped when the
+    # server goes idle. The demo data is loaded again on start (end of file).
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:////tmp/lis.db"
 else:
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'lis.db')}"
 
@@ -663,6 +661,16 @@ def forbidden(e):
 @app.errorhandler(404)
 def not_found(e):
     return render_template("404.html"), 404
+
+
+# ─────────────────────────────────────────────
+#  Vercel without a database: fill the temporary SQLite file with demo data
+# ─────────────────────────────────────────────
+if os.environ.get("VERCEL") and not database_url:
+    with app.app_context():
+        if not Member.query.first():
+            from seed import populate
+            populate(CATEGORY_LIMITS, FINE_PER_DAY, HOLD_DAYS)
 
 
 # ─────────────────────────────────────────────

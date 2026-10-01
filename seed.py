@@ -8,6 +8,9 @@ On the local SQLite database (lis.db) this resets everything and loads a
 fresh demo, so run it again right before a demo: due dates and fines are
 worked out from today's date.
 
+On Vercel with no DATABASE_URL, the app fills a temporary SQLite database
+with this same data by itself when it starts (see app.py).
+
 On a remote database (Supabase / PostgreSQL) it only adds rows that are
 missing, unless you ask for a reset:
     python seed.py --reset     # asks you to type "yes" first
@@ -16,8 +19,7 @@ missing, unless you ask for a reset:
 import sys
 
 from datetime import date, timedelta
-from app import app, db, CATEGORY_LIMITS, FINE_PER_DAY, HOLD_DAYS
-from models import Member, Book, Issue, Reservation
+from models import db, Member, Book, Issue, Reservation
 
 today = date.today()
 
@@ -201,7 +203,7 @@ RESERVATIONS = [
     ("978-0-201-63361-0", "R001", 6, "Waiting", None),
     ("978-0-201-63361-0", "U009", 4, "Waiting", None),
     # AI: A Modern Approach: one copy out, the other just returned and held for P002
-    ("978-0-13-461099-3", "P002", 14, "Hold", today + timedelta(days=HOLD_DAYS - 1)),
+    ("978-0-13-461099-3", "P002", 14, "Hold", "held since yesterday"),
     ("978-0-13-461099-3", "U006", 9, "Waiting", None),
     # Deep Learning: both copies out
     ("978-0-262-03561-3", "U010", 7, "Waiting", None),
@@ -216,13 +218,54 @@ RESERVATIONS = [
 ]
 
 
-def is_sqlite():
-    return db.engine.url.get_backend_name() == "sqlite"
+def populate(category_limits, fine_per_day, hold_days):
+    """Add the demo rows. Needs an app context and existing tables.
+
+    The app also calls this on Vercel to fill its temporary database.
+    """
+    for code, name, cat, joined in MEMBERS:
+        if not db.session.get(Member, code):
+            db.session.add(Member(code=code, name=name, category=cat, join_date=joined))
+
+    for isbn, title, author, pub, rack, copies, added in BOOKS:
+        if not db.session.get(Book, isbn):
+            db.session.add(Book(isbn=isbn, title=title, author=author, publisher=pub,
+                                rack_no=rack, total_copies=copies,
+                                available_copies=copies, date_added=added))
+    db.session.commit()
+
+    categories = {code: cat for code, _, cat, _ in MEMBERS}
+    for isbn, code, issued_ago, returned_ago in LOANS:
+        issued = ago(issued_ago)
+        due = issued + timedelta(days=category_limits[categories[code]]["days"])
+        returned = ago(returned_ago) if returned_ago is not None else None
+        fine = max(0, (returned - due).days) * fine_per_day if returned else 0.0
+        if not Issue.query.filter_by(book_isbn=isbn, member_code=code, issue_date=issued).first():
+            db.session.add(Issue(book_isbn=isbn, member_code=code, issue_date=issued,
+                                 due_date=due, return_date=returned, penalty_paid=fine))
+
+    for isbn, code, reserved_ago, status, hold in RESERVATIONS:
+        # The copy came back yesterday, so the hold runs for hold_days from then
+        hold_until = ago(1) + timedelta(days=hold_days) if hold else None
+        if not Reservation.query.filter_by(book_isbn=isbn, member_code=code, status=status).first():
+            db.session.add(Reservation(book_isbn=isbn, member_code=code,
+                                       reservation_date=ago(reserved_ago),
+                                       status=status, hold_until=hold_until))
+    db.session.commit()
+
+    # Copies on the shelf = total - copies on loan - copies held for a reservation
+    for book in Book.query.all():
+        on_loan = Issue.query.filter_by(book_isbn=book.isbn, return_date=None).count()
+        held = Reservation.query.filter_by(book_isbn=book.isbn, status="Hold").count()
+        book.available_copies = max(0, book.total_copies - on_loan - held)
+    db.session.commit()
 
 
 def seed():
+    from app import app, CATEGORY_LIMITS, FINE_PER_DAY, HOLD_DAYS
+
     with app.app_context():
-        if is_sqlite():
+        if db.engine.url.get_backend_name() == "sqlite":
             db.drop_all()
             print("[..] Local SQLite database: cleared for a fresh demo.")
         elif "--reset" in sys.argv:
@@ -237,40 +280,7 @@ def seed():
             print("[..] Remote database: adding missing rows only, nothing is deleted.")
         db.create_all()
 
-        for code, name, cat, joined in MEMBERS:
-            if not db.session.get(Member, code):
-                db.session.add(Member(code=code, name=name, category=cat, join_date=joined))
-
-        for isbn, title, author, pub, rack, copies, added in BOOKS:
-            if not db.session.get(Book, isbn):
-                db.session.add(Book(isbn=isbn, title=title, author=author, publisher=pub,
-                                    rack_no=rack, total_copies=copies,
-                                    available_copies=copies, date_added=added))
-        db.session.commit()
-
-        categories = {code: cat for code, _, cat, _ in MEMBERS}
-        for isbn, code, issued_ago, returned_ago in LOANS:
-            issued = ago(issued_ago)
-            due = issued + timedelta(days=CATEGORY_LIMITS[categories[code]]["days"])
-            returned = ago(returned_ago) if returned_ago is not None else None
-            fine = max(0, (returned - due).days) * FINE_PER_DAY if returned else 0.0
-            if not Issue.query.filter_by(book_isbn=isbn, member_code=code, issue_date=issued).first():
-                db.session.add(Issue(book_isbn=isbn, member_code=code, issue_date=issued,
-                                     due_date=due, return_date=returned, penalty_paid=fine))
-
-        for isbn, code, reserved_ago, status, hold_until in RESERVATIONS:
-            if not Reservation.query.filter_by(book_isbn=isbn, member_code=code, status=status).first():
-                db.session.add(Reservation(book_isbn=isbn, member_code=code,
-                                           reservation_date=ago(reserved_ago),
-                                           status=status, hold_until=hold_until))
-        db.session.commit()
-
-        # Copies on the shelf = total - copies on loan - copies held for a reservation
-        for book in Book.query.all():
-            on_loan = Issue.query.filter_by(book_isbn=book.isbn, return_date=None).count()
-            held = Reservation.query.filter_by(book_isbn=book.isbn, status="Hold").count()
-            book.available_copies = max(0, book.total_copies - on_loan - held)
-        db.session.commit()
+        populate(CATEGORY_LIMITS, FINE_PER_DAY, HOLD_DAYS)
 
         overdue = Issue.query.filter(Issue.return_date.is_(None), Issue.due_date < today).count()
         print("[OK] Seed complete.")
