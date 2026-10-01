@@ -1,96 +1,139 @@
 {% extends "base.html" %}
-{% block title %}Members{% endblock %}
+{% block title %}{{ 'Register Member' if request.args.get('new') else 'Members' }}{% endblock %}
 
-{% block content %}
-<h3 class="fw-bold mb-4"><i class="bi bi-people me-2"></i>Member Management</h3>
-
-<div class="row g-4">
-  <!-- Register new member -->
-  <div class="col-md-5">
-    <div class="card shadow-sm p-4 h-100">
-      <h5 class="fw-bold mb-3"><i class="bi bi-person-plus me-2"></i>Register New Member</h5>
-      <form method="POST" action="{{ url_for('members') }}">
-        <input type="hidden" name="action" value="add">
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Member Code <span class="text-danger">*</span></label>
-          <input type="text" name="code" class="form-control" placeholder="e.g. U001" required>
-          <div class="form-text">Unique code; will be stored in uppercase.</div>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Full Name <span class="text-danger">*</span></label>
-          <input type="text" name="name" class="form-control" placeholder="Member's full name" required>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
-          <select name="category" class="form-select" required>
-            <option value="" disabled selected>Select category…</option>
-            {% for cat in categories %}
-            <option value="{{ cat }}">
-              {{ cat }} —
-              {% if cat == 'UG' %}Undergraduate (2 books, 30 days)
-              {% elif cat == 'PG' %}Postgraduate (4 books, 30 days)
-              {% elif cat == 'RS' %}Research Scholar (6 books, 90 days)
-              {% elif cat == 'FA' %}Faculty (10 books, 180 days)
-              {% endif %}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <button type="submit" class="btn btn-lis-primary">
-          <i class="bi bi-person-check me-1"></i>Register Member
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Member list -->
-  <div class="col-md-7">
-    <div class="card shadow-sm p-4 h-100">
-      <h5 class="fw-bold mb-3"><i class="bi bi-list-ul me-2"></i>All Members ({{ members|length }})</h5>
-
-      {% if members %}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead class="table-dark">
-            <tr>
-              <th>Code</th>
-              <th>Name</th>
-              <th>Category</th>
-              <th>Joined</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for m in members %}
-            <tr>
-              <td><code>{{ m.code }}</code></td>
-              <td>{{ m.name }}</td>
-              <td><span class="badge bg-secondary">{{ m.category }}</span></td>
-              <td>{{ m.join_date.strftime('%d %b %Y') }}</td>
-              <td>
-                <form method="POST" action="{{ url_for('members') }}"
-                      onsubmit="return confirm('Remove {{ m.name }}? This cannot be undone.')">
-                  <input type="hidden" name="action" value="remove">
-                  <input type="hidden" name="remove_code" value="{{ m.code }}">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-person-dash"></i>
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <p class="text-muted">No members registered yet.</p>
-      {% endif %}
-    </div>
-  </div>
-</div>
+{% block extra_head %}
+<style>
+  .cat-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .cat-option { position: relative; }
+  .cat-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .cat-option label { display: block; cursor: pointer; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line-2); background: var(--surface); height: 100%; }
+  .cat-option label b { display: block; font-weight: 500; font-size: .9rem; color: var(--ink); }
+  .cat-option label span { font-size: .8rem; color: var(--muted); }
+  .cat-option label:hover { border-color: var(--faint); }
+  .cat-option input:checked + label { border-color: var(--accent); background: var(--accent-bg); box-shadow: inset 0 0 0 1px var(--accent); }
+  .cat-option input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .was-validated .cat-option input:invalid + label { border-color: var(--late); }
+  .was-validated .cat-options:has(input:invalid) ~ .invalid-feedback { display: block; }
+  .tally { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tally span { font-size: .84rem; color: var(--muted); border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-sm); padding: 4px 10px; }
+  .tally b { color: var(--ink); font-weight: 600; margin-left: 4px; }
+  @media (max-width: 575.98px) { .cat-options { grid-template-columns: 1fr; } }
+</style>
 {% endblock %}
 
+{% block content %}
+{% set cat_info = {
+  'UG': ('Undergraduate', 2, 30),
+  'PG': ('Postgraduate', 4, 30),
+  'RS': ('Research scholar', 6, 90),
+  'FA': ('Faculty', 10, 180),
+} %}
+
+{% if request.args.get('new') %}
+{# ── Register a member ── #}
+{% call form_page('Register a member', 'Add a student or staff member so they can borrow books.', image='register.png', warm=True, bleed=True, fade_left=True) %}
+<form method="POST" action="{{ url_for('members') }}" class="needs-validation" novalidate>
+  <input type="hidden" name="action" value="add">
+
+  <div class="field">
+    <label class="form-label" for="code">Member code <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="code" name="code" class="form-control form-control-lg mono uc" placeholder="e.g. U004" required autocomplete="off" maxlength="20" autofocus>
+    <div class="invalid-feedback">Give the member a code, such as U004.</div>
+  </div>
+
+  <div class="field">
+    <label class="form-label" for="name">Full name <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="name" name="name" class="form-control form-control-lg" placeholder="As on their college ID" required maxlength="120">
+    <div class="invalid-feedback">Enter the member's full name.</div>
+  </div>
+
+  <fieldset class="field">
+    <legend class="form-label">Category <span class="req" aria-hidden="true">*</span></legend>
+    <div class="cat-options">
+      {% for cat in categories %}
+      {% set info = cat_info.get(cat, (cat, '?', '?')) %}
+      <div class="cat-option">
+        <input type="radio" name="category" id="cat-{{ cat }}" value="{{ cat }}" required>
+        <label for="cat-{{ cat }}">
+          <b>{{ info[0] }}</b>
+          <span>{{ info[1] }} books, {{ info[2] }} days</span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="invalid-feedback">Choose a category.</div>
+  </fieldset>
+
+  <div class="d-flex gap-2 mt-4">
+    <button type="submit" class="btn btn-lis-primary btn-lg flex-grow-1">Register member</button>
+    <a href="{{ url_for('members') }}" class="btn btn-quiet btn-lg">Cancel</a>
+  </div>
+</form>
+{% endcall %}
+
+{% else %}
+{# ── Member list ── #}
+<div class="page-head">
+  <div>
+    <h1>Members</h1>
+    <p>Everyone who can borrow from the library.</p>
+  </div>
+  <div class="page-actions align-items-center">
+    <div class="tally" aria-label="Members by category">
+      {% for cat in categories %}
+      <span title="{{ cat_info.get(cat, (cat,))[0] }}">{{ cat }}<b>{{ members|selectattr('category', 'equalto', cat)|list|length }}</b></span>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('members', new=1) }}" class="btn btn-lis-primary"><i class="bi bi-person-plus me-2" aria-hidden="true"></i>Register member</a>
+  </div>
+</div>
+
+{% if members %}
+<div class="table-wrap" data-list data-page-size="12" data-noun="members">
+  {{ list_tools('Filter by name, code or category') }}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle table-stack">
+      <thead>
+        <tr>
+          <th scope="col">Name</th>
+          <th scope="col">Code</th>
+          <th scope="col">Category</th>
+          <th scope="col">Can borrow</th>
+          <th scope="col">Joined</th>
+          <th scope="col"><span class="visually-hidden">Remove</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in members %}
+        {% set info = cat_info.get(m.category, (m.category, '?', '?')) %}
+        <tr data-list-item>
+          <td class="stack-head"><div class="cell-title">{{ m.name }}</div></td>
+          <td data-label="Code"><span class="mono">{{ m.code }}</span></td>
+          <td data-label="Category"><span class="cat me-2">{{ m.category }}</span>{{ info[0] }}</td>
+          <td data-label="Can borrow" class="text-muted">{{ info[1] }} books for {{ info[2] }} days</td>
+          <td data-label="Joined" class="text-muted text-nowrap">{{ m.join_date.strftime('%d %b %Y') }}</td>
+          <td data-label="" class="text-end">
+            <form method="POST" action="{{ url_for('members') }}"
+                  data-confirm="{{ m.name }} ({{ m.code }}) will be removed from the system. This can't be undone." data-confirm-title="Remove this member?" data-confirm-action="Remove member">
+              <input type="hidden" name="action" value="remove">
+              <input type="hidden" name="remove_code" value="{{ m.code }}">
+              <button type="submit" class="btn btn-sm btn-text-danger">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="panel">
+  <div class="empty">
+    <h2>No members yet</h2>
+    <p>Register the first member. They can sign in with their code straight away.</p>
+    <a href="{{ url_for('members', new=1) }}" class="btn btn-lis-primary">Register member</a>
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

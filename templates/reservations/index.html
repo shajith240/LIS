@@ -1,95 +1,93 @@
 {% extends "base.html" %}
 {% block title %}Reservations Queue{% endblock %}
 
-{% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-  <div>
-    <h3 class="fw-bold mb-1"><i class="bi bi-bookmark-check text-warning me-2"></i>Active Reservations Queue</h3>
-    <p class="text-muted mb-0">Overview of all books currently placed on hold or in the waiting queue</p>
-  </div>
-  <button onclick="window.print()" class="btn btn-outline-secondary btn-sm no-print">
-    <i class="bi bi-printer me-1"></i>Print List
-  </button>
-</div>
+{% block extra_head %}
+<style>
+  .qgroup + .qgroup { border-top: 1px solid var(--line-2); }
+  .qhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 14px 20px 10px; background: var(--sunken); border-bottom: 1px solid var(--line); }
+  .qhead h2 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+  .qrow { display: grid; grid-template-columns: 36px minmax(0, 1.4fr) 110px minmax(0, 1.2fr) 90px; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid #edf0f4; }
+  .qrow:last-child { border-bottom: 0; }
+  .pos { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: .8rem; border: 1px solid var(--line-2); color: var(--ink); }
+  .pos.first { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .meta { font-size: .85rem; color: var(--muted); }
+  .meta .due { color: var(--late); font-weight: 500; }
+  @media (max-width: 767.98px) {
+    .qrow { grid-template-columns: 36px 1fr; row-gap: 6px; }
+    .qrow > :nth-child(n+3) { grid-column: 2; }
+  }
+  @media print { .qgroup { break-inside: avoid; } }
+</style>
+{% endblock %}
 
-{% if session_role == 'clerk' %}
-<div class="alert alert-info py-2 d-flex align-items-center mb-4 no-print">
-  <i class="bi bi-info-circle fs-5 me-2"></i>
-  <span><strong>Read-Only Access:</strong> Clerks can monitor reserved titles and holding members here. Reservations cannot be modified or cancelled by desk staff.</span>
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Reservation queue</h1>
+    <p>Members waiting for each book, in queue order.</p>
+  </div>
+  {% if reservations %}
+  <div class="page-actions no-print">
+    <button type="button" onclick="window.print()" class="btn btn-quiet"><i class="bi bi-printer me-2" aria-hidden="true"></i>Print list</button>
+  </div>
+  {% endif %}
 </div>
-{% elif session_role == 'librarian' %}
-<div class="alert alert-secondary py-2 d-flex align-items-center mb-4 no-print">
-  <i class="bi bi-shield-lock fs-5 me-2"></i>
-  <span><strong>Administrative Access:</strong> You may cancel reservations on behalf of members or for policy reasons.</span>
-</div>
-{% endif %}
 
 {% if reservations %}
-<div class="table-responsive bg-white rounded shadow-sm">
-  <table class="table table-hover align-middle mb-0">
-    <thead class="table-dark">
-      <tr>
-        <th>#</th>
-        <th>Book Title</th>
-        <th>ISBN</th>
-        <th>Member</th>
-        <th>Code</th>
-        <th>Category</th>
-        <th>Status</th>
-        <th>Requested On</th>
-        <th>Hold Deadline</th>
-        {% if session_role == 'librarian' %}<th class="no-print text-end">Action</th>{% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in reservations %}
-      <tr>
-        <td>{{ loop.index }}</td>
-        <td class="fw-semibold">{{ r.book.title if r.book else r.book_isbn }}</td>
-        <td><code>{{ r.book_isbn }}</code></td>
-        <td>{{ r.member.name if r.member else '—' }}</td>
-        <td><code>{{ r.member_code }}</code></td>
-        <td><span class="badge bg-secondary">{{ r.member.category if r.member else '—' }}</span></td>
-        <td>
-          {% if r.status == 'Hold' %}
-            <span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>On Hold</span>
-          {% elif r.status == 'Waiting' %}
-            <span class="badge bg-info text-dark"><i class="bi bi-hourglass-split me-1"></i>In Queue</span>
-          {% else %}
-            <span class="badge bg-secondary">{{ r.status }}</span>
-          {% endif %}
-        </td>
-        <td>{{ r.reservation_date.strftime('%d %b %Y') }}</td>
-        <td>
-          {% if r.status == 'Hold' and r.hold_until %}
-            <strong class="text-danger">{{ r.hold_until.strftime('%d %b %Y') }}</strong>
-            {% set days_left = (r.hold_until - today).days %}
-            <span class="badge bg-light text-dark border ms-1">{{ days_left }}d left</span>
-          {% else %}
-            <span class="text-muted">—</span>
-          {% endif %}
-        </td>
-        {% if session_role == 'librarian' %}
-        <td class="no-print text-end">
-          <form method="POST" action="{{ url_for('reservations_cancel') }}" onsubmit="return confirm('Cancel reservation for {{ r.member.name if r.member else r.member_code }}? If on hold, next waiting member will be promoted.')">
-            <input type="hidden" name="reservation_id" value="{{ r.id }}">
-            <button type="submit" class="btn btn-sm btn-outline-danger">
-              <i class="bi bi-x-circle me-1"></i>Cancel
-            </button>
-          </form>
-        </td>
+<div class="table-wrap" data-list data-page-size="8" data-noun="books with a queue">
+  {{ list_tools('Filter by book, member or code') }}
+
+  {% for isbn, group in reservations|groupby('book_isbn') %}
+  {% set first = group[0] %}
+  <section class="qgroup" data-list-item aria-label="Queue for {{ first.book.title if first.book else isbn }}">
+    <div class="qhead">
+      <div>
+        <h2>{{ first.book.title if first.book else isbn }}</h2>
+        <div class="meta"><code>{{ isbn }}</code>{% if first.book %}, rack {{ first.book.rack_no }}{% endif %}</div>
+      </div>
+      <span class="count">{{ group|length }} {{ 'person' if group|length == 1 else 'people' }} in queue</span>
+    </div>
+
+    {% for r in group %}
+    <div class="qrow">
+      <span class="pos {{ 'first' if loop.first }}" title="Position {{ loop.index }} in queue">{{ loop.index }}</span>
+      <div class="min-w-0">
+        <div class="cell-title">{{ r.member.name if r.member else 'Unknown member' }}</div>
+        <div class="meta"><span class="mono">{{ r.member_code }}</span>{% if r.member %} <span class="cat ms-1">{{ r.member.category }}</span>{% endif %}</div>
+      </div>
+      <div>
+        {% if r.status == 'Hold' %}<span class="tag tag-warn">On hold</span>
+        {% elif r.status == 'Waiting' %}<span class="tag tag-info">Waiting</span>
+        {% else %}<span class="tag tag-mute">{{ r.status }}</span>{% endif %}
+      </div>
+      <div class="meta">
+        Asked {{ r.reservation_date.strftime('%d %b %Y') }}
+        {% if r.status == 'Hold' and r.hold_until %}
+          {% set days_left = (r.hold_until - today).days %}
+          <br><span class="due">Collect by {{ r.hold_until.strftime('%d %b') }}, {% if days_left <= 0 %}last day today{% elif days_left == 1 %}1 day left{% else %}{{ days_left }} days left{% endif %}</span>
         {% endif %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+      </div>
+      <div class="text-end no-print">
+        {% if session_role == 'librarian' %}
+        <form method="POST" action="{{ url_for('reservations_cancel') }}"
+              data-confirm="{{ r.member.name if r.member else r.member_code }} will lose their place for “{{ first.book.title if first.book else isbn }}”.{% if r.status == 'Hold' %} The copy will pass to the next member waiting.{% endif %}"
+              data-confirm-title="Cancel this reservation?" data-confirm-action="Cancel reservation">
+          <input type="hidden" name="reservation_id" value="{{ r.id }}">
+          <button type="submit" class="btn btn-sm btn-text-danger">Cancel</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+  {% endfor %}
 </div>
 {% else %}
-<div class="card p-5 text-center bg-white shadow-sm">
-  <i class="bi bi-bookmark-check display-4 text-muted mb-3"></i>
-  <h5>No Active Reservations</h5>
-  <p class="text-muted mb-0">There are currently no books on hold or in the waiting queue.</p>
+<div class="panel">
+  <div class="empty">
+    <h2>Nobody is waiting</h2>
+    <p>When a member reserves a book with no free copy, they show up here in queue order.</p>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
-

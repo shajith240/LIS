@@ -4,68 +4,68 @@
 {% block extra_head %}
 <style>
   @media print {
-    .page-title { font-size: 18pt; }
+    .page-title { font-size: 16pt; }
     table { font-size: 10pt; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 no-print">
-  <h3 class="fw-bold mb-0"><i class="bi bi-archive me-2"></i>Unused Books Report</h3>
-  <button onclick="window.print()" class="btn btn-lis-primary">
-    <i class="bi bi-printer me-1"></i>Print Report
-  </button>
+<div class="page-head no-print">
+  <div>
+    <h1>Unused books</h1>
+    <p>Titles nobody has borrowed since {{ cutoff.strftime('%d %b %Y') }}.</p>
+  </div>
+  {% if books %}
+  <div class="page-actions">
+    <button type="button" onclick="window.print()" class="btn btn-lis-primary"><i class="bi bi-printer me-2" aria-hidden="true"></i>Print report</button>
+  </div>
+  {% endif %}
 </div>
 
 <!-- Print header -->
-<div class="print-only text-center mb-4">
-  <h4 class="page-title fw-bold">Library Information System — Unused Books Report</h4>
-  <p>Books with no issue record since {{ cutoff.strftime('%d %B %Y') }}</p>
-  <hr>
+<div class="print-only mb-3">
+  <h1 class="page-title">Unused books</h1>
+  <p>Library Information System. Books with no issue record since {{ cutoff.strftime('%d %B %Y') }}.</p>
 </div>
-
-<p class="text-muted no-print">
-  Books not issued even once since <strong>{{ cutoff.strftime('%d %b %Y') }}</strong> (last 5 years).
-</p>
 
 {% if books %}
-<p class="text-muted no-print">{{ books|length }} book(s) found.</p>
-
-<div class="table-responsive">
-  <table class="table table-bordered align-middle bg-white">
-    <thead class="table-dark">
-      <tr>
-        <th>#</th>
-        <th>ISBN</th>
-        <th>Title</th>
-        <th>Author</th>
-        <th>Publisher</th>
-        <th>Rack</th>
-        <th>Copies</th>
-        <th>Date Added</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for b in books %}
-      <tr>
-        <td>{{ loop.index }}</td>
-        <td><code>{{ b.isbn }}</code></td>
-        <td>{{ b.title }}</td>
-        <td>{{ b.author }}</td>
-        <td>{{ b.publisher or '—' }}</td>
-        <td>{{ b.rack_no }}</td>
-        <td>{{ b.total_copies }}</td>
-        <td>{{ b.date_added.strftime('%d %b %Y') }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="table-wrap" data-list data-page-size="10" data-noun="books">
+  {{ list_tools('Filter by title, author or rack', title='Not borrowed since ' ~ cutoff.strftime('%d %b %Y')) }}
+  <div class="table-responsive">
+    <table class="table align-middle table-stack">
+      <thead>
+        <tr>
+          <th scope="col">Book</th>
+          <th scope="col">ISBN</th>
+          <th scope="col">Rack</th>
+          <th scope="col" class="num">Copies</th>
+          <th scope="col">Added</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in books %}
+        <tr data-list-item>
+          <td class="stack-head">
+            <div class="cell-title">{{ b.title }}</div>
+            <div class="cell-sub">{{ b.author }}{% if b.publisher %}, {{ b.publisher }}{% endif %}</div>
+          </td>
+          <td data-label="ISBN"><code>{{ b.isbn }}</code></td>
+          <td data-label="Rack"><span class="cat">{{ b.rack_no }}</span></td>
+          <td data-label="Copies" class="num">{{ b.total_copies }}</td>
+          <td data-label="Added" class="text-muted small text-nowrap">{{ b.date_added.strftime('%d %b %Y') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% else %}
-<div class="alert alert-success">
-  <i class="bi bi-check-circle me-2"></i>All books have been issued at least once in the past 5 years.
+<div class="panel">
+  <div class="empty">
+    <h2>Every book has been borrowed recently</h2>
+    <p>Each title has at least one issue since {{ cutoff.strftime('%d %b %Y') }}.</p>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
-

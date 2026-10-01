@@ -1,59 +1,61 @@
 {% extends "base.html" %}
 {% block title %}Reservation Slip{% endblock %}
 
+{% block extra_head %}
+<style>
+  .hold { padding: 18px 24px; border-bottom: 1px solid var(--line); }
+  .hold .label { color: var(--muted); font-size: .85rem; }
+  .hold .date { font-size: 1.5rem; font-weight: 600; color: var(--ink); line-height: 1.2; }
+  .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 14px 0 8px; }
+  .days span { height: 8px; border-radius: 2px; background: var(--warn-bg); border: 1px solid #e6cf9f; }
+  .days span:last-child { background: var(--warn); border-color: var(--warn); }
+  .days-legend { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
+  @media print { .days span { border-color: #999; } }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6">
-    <div class="card shadow-sm p-4" id="slip">
+<div class="page-head no-print">
+  <div>
+    <h1>Return recorded, copy on hold</h1>
+    <p>A member was waiting, so this copy is now held for them. Print the slip and keep it with the book.</p>
+  </div>
+</div>
 
-      <div class="text-center mb-3">
-        <h4 class="fw-bold">Library Information System</h4>
-        <p class="text-muted mb-0">Reservation Hold Slip</p>
-        <hr>
+<div class="row">
+  <div class="col-xxl-8 col-xl-9">
+    <div class="doc" id="slip">
+      <div class="doc-head">
+        <div>
+          <h2>Reservation hold slip</h2>
+          <div class="small text-muted">Library Information System</div>
+        </div>
+        <span class="tag tag-warn">On hold</span>
       </div>
 
-      <div class="alert alert-warning no-print">
-        <i class="bi bi-bookmark-check me-2"></i>
-        <strong>Book returned.</strong> A reservation hold has been placed. Please hand this slip to the waiting member.
+      <div class="hold">
+        <div class="label">Collect by</div>
+        <div class="date">{{ hold_until.strftime('%A, %d %b %Y') }}</div>
+        <div class="days" aria-hidden="true">{% for d in range(7) %}<span></span>{% endfor %}</div>
+        <div class="days-legend"><span>Held from today</span><span>7th day: last day to collect</span></div>
       </div>
 
-      <table class="table table-borderless mb-0">
-        <tr><th>Reserved For</th><td><strong>{{ reserved_member.name }}</strong></td></tr>
-        <tr><th>Member Code</th><td>{{ reserved_member.code }}</td></tr>
-        <tr><th>Category</th><td>{{ reserved_member.category }}</td></tr>
-        <tr><th colspan="2"><hr class="my-1"></th></tr>
-        <tr><th>Book Title</th><td>{{ book.title }}</td></tr>
-        <tr><th>Author</th><td>{{ book.author }}</td></tr>
-        <tr><th>ISBN</th><td>{{ book.isbn }}</td></tr>
-        <tr><th>Rack</th><td>{{ book.rack_no }}</td></tr>
-        <tr><th colspan="2"><hr class="my-1"></th></tr>
-        <tr>
-          <th>Hold Expires</th>
-          <td><strong class="text-danger">{{ hold_until.strftime('%d %b %Y') }}</strong> (7 days)</td>
-        </tr>
-        {% if penalty > 0 %}
-        <tr>
-          <th>Penalty Collected</th>
-          <td><strong>Rs. {{ "%.0f"|format(penalty) }}</strong> from returning member</td>
-        </tr>
-        {% endif %}
-      </table>
-
-      <hr>
-      <p class="text-muted small text-center">
-        The book will be held until <strong>{{ hold_until.strftime('%d %b %Y') }}</strong>.
-        If not collected by then, the hold will expire automatically.
-      </p>
-
-      <div class="d-flex gap-2 no-print justify-content-end">
-        <button onclick="window.print()" class="btn btn-lis-primary">
-          <i class="bi bi-printer me-1"></i>Print Slip
-        </button>
-        <a href="{{ url_for('book_return') }}" class="btn btn-outline-secondary">New Return</a>
+      <div class="doc-body">
+        <dl class="kv">
+          <dt>Held for</dt><dd>{{ reserved_member.name if reserved_member else '—' }} <span class="mono text-muted ms-1">{{ reserved_member.code if reserved_member }}</span>{% if reserved_member %} <span class="cat ms-1">{{ reserved_member.category }}</span>{% endif %}</dd>
+          <dt>Book</dt><dd>{{ book.title if book else '—' }}</dd>
+          <dt>Author</dt><dd>{{ book.author if book else '—' }}</dd>
+          <dt>ISBN</dt><dd><code>{{ book.isbn if book else issue.book_isbn }}</code></dd>
+          <dt>Rack</dt><dd>{% if book %}<span class="cat">{{ book.rack_no }}</span>{% else %}—{% endif %}</dd>
+          <dt>Fine collected</dt><dd>{% if penalty > 0 %}<span class="text-danger">Rs. {{ "%.0f"|format(penalty) }}</span> <span class="small text-muted fw-normal">from the member who returned it</span>{% else %}None{% endif %}</dd>
+        </dl>
       </div>
 
+      <div class="doc-foot no-print">
+        <a href="{{ url_for('book_return') }}" class="btn btn-quiet">Record another return</a>
+        <button type="button" onclick="window.print()" class="btn btn-lis-primary"><i class="bi bi-printer me-2" aria-hidden="true"></i>Print slip</button>
+      </div>
     </div>
   </div>
 </div>
 {% endblock %}
-

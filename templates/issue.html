@@ -2,51 +2,23 @@
 {% block title %}Issue Book{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6">
-    <div class="card shadow-sm p-4">
-      <h3 class="fw-bold mb-4"><i class="bi bi-arrow-up-circle me-2"></i>Issue Book</h3>
-
-      <form method="POST" action="{{ url_for('issue') }}">
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Member Code <span class="text-danger">*</span></label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-person"></i></span>
-            <input type="text" name="member_code" class="form-control form-control-lg"
-                   placeholder="e.g. U001" required autofocus autocomplete="off">
-          </div>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Book ISBN <span class="text-danger">*</span></label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-            <input type="text" name="isbn" class="form-control form-control-lg"
-                   placeholder="Enter ISBN" required autocomplete="off">
-          </div>
-        </div>
-
-        <div class="d-grid mt-4">
-          <button type="submit" class="btn btn-lis-primary btn-lg">
-            <i class="bi bi-arrow-up-circle me-2"></i>Issue Book
-          </button>
-        </div>
-      </form>
-
-      <div class="mt-4 p-3 bg-light rounded border">
-        <p class="mb-1 fw-semibold text-muted small">Issue Limits (by category)</p>
-        <table class="table table-sm mb-0 small">
-          <thead><tr><th>Category</th><th>Max Books</th><th>Loan Period</th></tr></thead>
-          <tbody>
-            <tr><td>UG</td><td>2</td><td>30 days</td></tr>
-            <tr><td>PG</td><td>4</td><td>30 days</td></tr>
-            <tr><td>RS</td><td>6</td><td>90 days</td></tr>
-            <tr><td>FA</td><td>10</td><td>180 days</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+{% call form_page('Issue a book', 'Lend a copy to a member.', image='issue.png', bleed=True) %}
+<form method="POST" action="{{ url_for('issue') }}" class="needs-validation" novalidate>
+  <div class="field">
+    <label class="form-label" for="memberCode">Member code <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="memberCode" name="member_code" class="form-control form-control-lg mono uc"
+           placeholder="e.g. U001" required autofocus autocomplete="off" maxlength="20" data-prefill="member">
+    <div class="invalid-feedback">Enter the member's code, printed on their library card.</div>
   </div>
-</div>
-{% endblock %}
 
+  <div class="field">
+    <label class="form-label" for="isbn">Book ISBN <span class="req" aria-hidden="true">*</span></label>
+    <input type="text" id="isbn" name="isbn" class="form-control form-control-lg mono"
+           placeholder="e.g. 978-0-13-468599-1" required autocomplete="off" maxlength="32" data-prefill="isbn">
+    <div class="invalid-feedback">Enter the ISBN from the book.</div>
+  </div>
+
+  <button type="submit" class="btn btn-lis-primary btn-lg w-100 mt-4">Issue book</button>
+</form>
+{% endcall %}
+{% endblock %}

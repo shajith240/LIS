@@ -1,68 +1,63 @@
 {% extends "base.html" %}
 {% block title %}Delete Book{% endblock %}
 
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-6">
-    <div class="card shadow-sm p-4">
-      <h3 class="fw-bold mb-4"><i class="bi bi-trash me-2"></i>Delete Book</h3>
-
-      <!-- Step 1: Look up ISBN -->
-      <form method="POST" action="{{ url_for('books_delete') }}">
-        <input type="hidden" name="action" value="lookup">
-        <div class="input-group mb-3">
-          <input type="text" name="isbn" class="form-control" placeholder="Enter ISBN to look up" required
-                 value="{{ book.isbn if book else '' }}">
-          <button class="btn btn-lis-primary" type="submit">Look Up</button>
-        </div>
-      </form>
-
-      {% if book %}
-      <!-- Step 2: Show book details + confirm -->
-      <div class="card border mb-3">
-        <div class="card-body">
-          <h5 class="card-title">{{ book.title }}</h5>
-          <p class="card-text mb-1"><strong>Author:</strong> {{ book.author }}</p>
-          <p class="card-text mb-1"><strong>ISBN:</strong> <code>{{ book.isbn }}</code></p>
-          <p class="card-text mb-1"><strong>Rack:</strong> {{ book.rack_no }}</p>
-          <p class="card-text mb-1"><strong>Total Copies:</strong> {{ book.total_copies }}</p>
-          <p class="card-text">
-            <strong>Available:</strong>
-            {% if book.available_copies == book.total_copies %}
-              <span class="text-success fw-bold">{{ book.available_copies }} (all in)</span>
-            {% else %}
-              <span class="text-danger fw-bold">{{ book.available_copies }} / {{ book.total_copies }}
-              — {{ book.total_copies - book.available_copies }} on loan</span>
-            {% endif %}
-          </p>
-        </div>
-      </div>
-
-      {% if book.available_copies == book.total_copies %}
-      <div class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        This action is <strong>irreversible</strong>. All records for this book will be removed.
-      </div>
-      <form method="POST" action="{{ url_for('books_delete') }}">
-        <input type="hidden" name="action" value="confirm">
-        <input type="hidden" name="isbn" value="{{ book.isbn }}">
-        <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-danger">
-            <i class="bi bi-trash me-1"></i>Confirm Delete
-          </button>
-          <a href="{{ url_for('books_delete') }}" class="btn btn-outline-secondary">Cancel</a>
-        </div>
-      </form>
-      {% else %}
-      <div class="alert alert-danger">
-        <i class="bi bi-x-circle me-2"></i>
-        Cannot delete: {{ book.total_copies - book.available_copies }} cop{{ 'y' if (book.total_copies - book.available_copies) == 1 else 'ies' }} currently on loan.
-      </div>
-      {% endif %}
-      {% endif %}
-
-    </div>
-  </div>
-</div>
+{% block extra_head %}
+<style>
+  .found { margin-top: 28px; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+  .found-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .found-head h2 { margin: 0 0 2px; overflow-wrap: anywhere; }
+  .found .doc-body { padding: 4px 20px 6px; }
+  .found .doc-foot { padding: 12px 20px; }
+</style>
 {% endblock %}
 
+{% block content %}
+{% call form_page('Remove a book', 'Look up a book by its ISBN, then remove it.', image='remove-book.png', bleed=True, fill=True) %}
+<form method="POST" action="{{ url_for('books_delete') }}" class="needs-validation" novalidate>
+  <input type="hidden" name="action" value="lookup">
+  <label class="form-label" for="isbn">Book ISBN <span class="req" aria-hidden="true">*</span></label>
+  <div class="d-flex gap-2">
+    <input type="text" id="isbn" name="isbn" class="form-control form-control-lg mono" placeholder="e.g. 978-0-13-468599-1" required maxlength="32" autocomplete="off"
+           value="{{ book.isbn if book else '' }}" {{ 'autofocus' if not book }}>
+    <button class="btn btn-quiet btn-lg text-nowrap" type="submit">Look up</button>
+  </div>
+  <div class="invalid-feedback">Enter an ISBN to look up.</div>
+</form>
+
+{% if book %}
+{% set on_loan = book.total_copies - book.available_copies %}
+<div class="found">
+  <div class="found-head">
+    <div class="min-w-0">
+      <h2>{{ book.title }}</h2>
+      <div class="small text-muted">{{ book.author }}</div>
+    </div>
+    {% if on_loan == 0 %}<span class="tag tag-ok">All copies in</span>{% else %}<span class="tag tag-late">{{ on_loan }} on loan</span>{% endif %}
+  </div>
+  <div class="doc-body">
+    <dl class="kv">
+      <dt>ISBN</dt><dd><code>{{ book.isbn }}</code></dd>
+      <dt>Rack</dt><dd><span class="cat">{{ book.rack_no }}</span></dd>
+      <dt>On shelf</dt><dd>{{ copies(book.available_copies, book.total_copies) }}</dd>
+    </dl>
+  </div>
+  <div class="doc-foot">
+    {% if on_loan == 0 %}
+    <form method="POST" action="{{ url_for('books_delete') }}" class="d-flex gap-2 flex-wrap justify-content-end w-100"
+          data-confirm="“{{ book.title }}” and all {{ book.total_copies }} cop{{ 'y' if book.total_copies == 1 else 'ies' }} will be removed from the catalogue. This can't be undone."
+          data-confirm-title="Remove this book?" data-confirm-action="Remove book">
+      <input type="hidden" name="action" value="confirm">
+      <input type="hidden" name="isbn" value="{{ book.isbn }}">
+      <a href="{{ url_for('books_delete') }}" class="btn btn-quiet">Cancel</a>
+      <button type="submit" class="btn btn-danger">Remove book</button>
+    </form>
+    {% else %}
+    <p class="mb-0 me-auto small" style="color: var(--late)">
+      <i class="bi bi-lock me-1" aria-hidden="true"></i>Can't be removed while {{ on_loan }} cop{{ 'y is' if on_loan == 1 else 'ies are' }} on loan.
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endcall %}
+{% endblock %}

@@ -1,51 +1,96 @@
+{# The sign-in page always renders on its own, even if a session already exists #}
+{% set standalone = true %}
 {% extends "base.html" %}
 {% block title %}Sign In{% endblock %}
 
-{% block content %}
-<div class="row justify-content-center mt-5">
-  <div class="col-md-5">
-    <div class="card shadow-sm p-4">
-      <h2 class="mb-4 text-center fw-bold">
-        <i class="bi bi-book-half me-2" style="color:#c0392b;"></i>Library Information System
-      </h2>
-      <p class="text-center text-muted mb-4">Sign in by selecting your role or entering your member code.</p>
+{% block extra_head %}
+<style>
+  /* Sizes scale with the viewport so the page reads well from a laptop to a large monitor */
+  .auth { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); min-height: 100vh; font-size: 1rem; }
+  .auth-story { background: var(--ink); padding: clamp(32px, 5vw, 80px); display: flex; flex-direction: column; justify-content: center; }
+  .auth-story h1 { color: #fff; font-size: clamp(2.25rem, 3.6vw, 3.75rem); line-height: 1.08; margin: 0 0 20px; max-width: 12ch; }
+  .auth-story p { color: #b8c2d3; font-size: clamp(1.05rem, 1.3vw, 1.35rem); margin: 0; max-width: 30ch; }
 
-      <form method="POST" action="{{ url_for('login') }}">
+  .auth-form { display: flex; align-items: center; justify-content: center; padding: clamp(32px, 4vw, 64px); background: var(--paper); }
+  .auth-card { width: 100%; max-width: clamp(480px, 46vw, 720px); }
+  .auth-card h2 { font-size: clamp(1.6rem, 2vw, 2.1rem); margin-bottom: clamp(20px, 2vw, 32px); }
 
-        <!-- Staff roles -->
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Staff Role</label>
-          <div class="d-grid gap-2">
-            <button type="submit" name="role" value="librarian" class="btn btn-lis-primary btn-lg">
-              <i class="bi bi-person-badge me-2"></i>Sign in as Librarian
-            </button>
-            <button type="submit" name="role" value="clerk" class="btn btn-outline-dark btn-lg">
-              <i class="bi bi-person-workspace me-2"></i>Sign in as Clerk
-            </button>
-          </div>
-        </div>
+  .roles { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(14px, 1.4vw, 24px); }
+  .role {
+    display: flex; flex-direction: column; padding: 0; overflow: hidden; text-align: left;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); color: var(--ink);
+    transition: border-color .15s;
+  }
+  .role-photo { aspect-ratio: 1 / 1; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+  .role.librarian .role-photo { background: #ece6e3; }
+  .role.clerk .role-photo { background: #e3e8ef; }
+  .role-photo img { width: 92%; height: auto; display: block; transition: transform .2s; }
+  .role-name { padding: clamp(14px, 1.2vw, 20px) clamp(16px, 1.4vw, 24px); border-top: 1px solid var(--line); font-weight: 600; font-size: clamp(1.05rem, 1.15vw, 1.25rem); display: flex; justify-content: space-between; align-items: center; }
+  .role-name i { color: var(--muted); }
+  .role:hover { border-color: var(--accent); }
+  .role:hover .role-photo img { transform: scale(1.03); }
+  .role:hover .role-name i { color: var(--accent); }
+  .role:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-        <div class="text-center my-3 text-muted">— or —</div>
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: .95rem; margin: clamp(24px, 2.2vw, 36px) 0 clamp(18px, 1.6vw, 24px); }
+  .divider::before, .divider::after { content: ""; flex: 1; border-top: 1px solid var(--line-2); }
+  .auth-card .form-label { font-size: 1rem; }
+  .auth-card .form-control-lg, .auth-card .btn-lg { font-size: 1.1rem; padding-top: .8rem; padding-bottom: .8rem; }
 
-        <!-- Member code -->
-        <div class="mb-3">
-          <label for="memberCode" class="form-label fw-semibold">Member Code</label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-person-circle"></i></span>
-            <input type="text" class="form-control form-control-lg" id="memberCode"
-                   name="role" placeholder="e.g. U001" autocomplete="off">
-          </div>
-          <div class="form-text">Enter your member code to sign in as a member.</div>
-        </div>
+  @media (max-width: 991.98px) {
+    .auth { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .auth-story { padding: 32px 20px; }
+    .auth-story h1 { font-size: 2.1rem; }
+    .auth-form { padding: 28px 16px 48px; align-items: flex-start; }
+    .auth-card { max-width: 560px; }
+  }
+  @media (max-width: 420px) { .roles { gap: 10px; } .role-name { font-size: 1rem; padding: 12px 14px; } }
+  @media (prefers-reduced-motion: reduce) { .role-photo img { transition: none; } .role:hover .role-photo img { transform: none; } }
+</style>
+{% endblock %}
 
-        <div class="d-grid mt-3">
-          <button type="submit" class="btn btn-outline-secondary btn-lg">
-            <i class="bi bi-arrow-right-circle me-2"></i>Sign in as Member
-          </button>
-        </div>
-      </form>
+{% block guest %}
+<div class="auth">
+  <section class="auth-story">
+    <h1>Library Information System</h1>
+    <p>Find, borrow and reserve books in one place.</p>
+  </section>
+
+  <section class="auth-form">
+    <div class="auth-card">
+      {{ flashes() }}
+      {{ self.content() }}
     </div>
-  </div>
+  </section>
 </div>
 {% endblock %}
 
+{% block content %}
+<h2>Sign in</h2>
+
+<form method="POST" action="{{ url_for('login') }}">
+  <!-- Default button for Enter in the member field, so Enter doesn't submit "librarian" -->
+  <button type="submit" tabindex="-1" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;"></button>
+
+  <!-- Staff roles (must stay before the member field: both submit "role") -->
+  <div class="roles">
+    <button type="submit" name="role" value="librarian" class="role librarian" formnovalidate>
+      <span class="role-photo"><img src="{{ url_for('static', filename='img/librarian.png') }}" alt="" width="560" height="512"></span>
+      <span class="role-name">Librarian <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+    </button>
+    <button type="submit" name="role" value="clerk" class="role clerk" formnovalidate>
+      <span class="role-photo"><img src="{{ url_for('static', filename='img/clerk.png') }}" alt="" width="560" height="512"></span>
+      <span class="role-name">Clerk <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+    </button>
+  </div>
+
+  <div class="divider">or sign in as a member</div>
+
+  <label for="memberCode" class="form-label">Member code</label>
+  <div class="d-flex gap-2">
+    <input type="text" class="form-control form-control-lg mono uc" id="memberCode"
+           name="role" placeholder="e.g. U001" autocomplete="off" maxlength="20" required>
+    <button type="submit" class="btn btn-lis-primary btn-lg px-4 text-nowrap flex-shrink-0">Sign in</button>
+  </div>
+</form>
+{% endblock %}

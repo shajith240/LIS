@@ -48,3 +48,6 @@ build/
 htmlcov/
 .coverage
 coverage.xml
+
+# ── Full-size source images (web copies live in static/img) ──
+design/

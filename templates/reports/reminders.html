@@ -3,68 +3,93 @@
 
 {% block extra_head %}
 <style>
+  .summary { display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--sunken); font-size: .9rem; color: var(--muted); }
+  .summary b { color: var(--ink); font-weight: 600; font-size: 1rem; margin-right: 4px; }
+  .summary .late b { color: var(--late); }
+  .late-bar { display: inline-block; width: 64px; height: 6px; border-radius: 3px; background: var(--late-bg); vertical-align: middle; margin-left: 10px; overflow: hidden; }
+  .late-bar i { display: block; height: 100%; background: var(--late); }
   @media print {
-    .page-title { font-size: 18pt; }
+    .page-title { font-size: 16pt; }
     table { font-size: 10pt; }
+    .late-bar { display: none; }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4 no-print">
-  <h3 class="fw-bold mb-0"><i class="bi bi-bell me-2"></i>Overdue Reminders</h3>
-  <button onclick="window.print()" class="btn btn-lis-primary">
-    <i class="bi bi-printer me-1"></i>Print Reminders
-  </button>
+<div class="page-head no-print">
+  <div>
+    <h1>Overdue reminders</h1>
+    <p>Loans past their due date as of {{ today.strftime('%d %b %Y') }}.</p>
+  </div>
+  {% if overdue %}
+  <div class="page-actions">
+    <button type="button" onclick="window.print()" class="btn btn-lis-primary"><i class="bi bi-printer me-2" aria-hidden="true"></i>Print reminders</button>
+  </div>
+  {% endif %}
 </div>
 
 <!-- Print header (hidden on screen) -->
-<div class="print-only text-center mb-4">
-  <h4 class="page-title fw-bold">Library Information System — Overdue Reminders</h4>
-  <p>As of {{ today.strftime('%d %B %Y') }}</p>
-  <hr>
+<div class="print-only mb-3">
+  <h1 class="page-title">Overdue reminders</h1>
+  <p>Library Information System, as of {{ today.strftime('%d %B %Y') }}. Fine: Rs. 2 per day late.</p>
 </div>
 
 {% if overdue %}
-<p class="text-muted no-print">{{ overdue|length }} overdue loan(s) as of {{ today.strftime('%d %b %Y') }}.</p>
+{% set ns = namespace(total=0, worst=1) %}
+{% for iss in overdue %}
+  {% set d = (today - iss.due_date).days %}
+  {% set ns.total = ns.total + d * 2 %}
+  {% if d > ns.worst %}{% set ns.worst = d %}{% endif %}
+{% endfor %}
 
-<div class="table-responsive">
-  <table class="table table-bordered align-middle bg-white">
-    <thead class="table-dark">
-      <tr>
-        <th>#</th>
-        <th>Member Code</th>
-        <th>Member Name</th>
-        <th>Category</th>
-        <th>Book ISBN</th>
-        <th>Book Title</th>
-        <th>Due Date</th>
-        <th>Days Overdue</th>
-        <th>Fine (Rs. 2/day)</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for iss in overdue %}
-      {% set overdue_days = (today - iss.due_date).days %}
-      <tr>
-        <td>{{ loop.index }}</td>
-        <td><code>{{ iss.member_code }}</code></td>
-        <td>{{ iss.member.name }}</td>
-        <td><span class="badge bg-secondary">{{ iss.member.category }}</span></td>
-        <td><code>{{ iss.book_isbn }}</code></td>
-        <td>{{ iss.book.title }}</td>
-        <td class="text-danger fw-semibold">{{ iss.due_date.strftime('%d %b %Y') }}</td>
-        <td class="text-danger fw-bold">{{ overdue_days }}</td>
-        <td class="fw-bold">Rs. {{ overdue_days * 2 }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="table-wrap" data-list data-page-size="10" data-noun="overdue loans">
+  <div class="summary">
+    <span class="late"><b>{{ overdue|length }}</b>overdue loan{{ '' if overdue|length == 1 else 's' }}</span>
+    <span><b>Rs. {{ ns.total }}</b>in fines so far</span>
+    <span><b>{{ ns.worst }}</b>day{{ '' if ns.worst == 1 else 's' }}, the longest overdue</span>
+  </div>
+  {{ list_tools('Filter by member, book or code') }}
+  <div class="table-responsive">
+    <table class="table align-middle table-stack">
+      <thead>
+        <tr>
+          <th scope="col">Member</th>
+          <th scope="col">Book</th>
+          <th scope="col">Due</th>
+          <th scope="col" class="num">Days late</th>
+          <th scope="col" class="num">Fine</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for iss in overdue %}
+        {% set overdue_days = (today - iss.due_date).days %}
+        <tr data-list-item>
+          <td class="stack-head">
+            <div class="cell-title">{{ iss.member.name if iss.member else 'Unknown member' }}</div>
+            <div class="cell-sub"><span class="mono">{{ iss.member_code }}</span>{% if iss.member %} <span class="cat ms-1">{{ iss.member.category }}</span>{% endif %}</div>
+          </td>
+          <td data-label="Book">
+            <div class="cell-title">{{ iss.book.title if iss.book else iss.book_isbn }}</div>
+            <div class="cell-sub"><code>{{ iss.book_isbn }}</code></div>
+          </td>
+          <td data-label="Due" class="text-nowrap">{{ iss.due_date.strftime('%d %b %Y') }}</td>
+          <td data-label="Days late" class="num text-nowrap">
+            {{ overdue_days }}<span class="late-bar" aria-hidden="true"><i style="width: {{ (overdue_days / ns.worst * 100)|round }}%"></i></span>
+          </td>
+          <td data-label="Fine" class="num fw-semibold text-nowrap">Rs. {{ overdue_days * 2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% else %}
-<div class="alert alert-success">
-  <i class="bi bi-check-circle me-2"></i>No overdue loans as of {{ today.strftime('%d %b %Y') }}.
+<div class="panel">
+  <div class="empty">
+    <h2>No overdue loans</h2>
+    <p>Every book on loan is within its due date on {{ today.strftime('%d %b %Y') }}. There's nothing to send.</p>
+  </div>
 </div>
 {% endif %}
 {% endblock %}
-

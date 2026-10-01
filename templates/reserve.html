@@ -1,102 +1,97 @@
 {% extends "base.html" %}
 {% block title %}Reserve Book & My Reservations{% endblock %}
 
-{% block content %}
-<div class="row justify-content-center g-4">
-  <!-- Place Reservation Form -->
-  <div class="col-lg-5">
-    <div class="card shadow-sm p-4 bg-white h-100">
-      <h4 class="fw-bold mb-2"><i class="bi bi-bookmark-plus text-primary me-2"></i>Reserve a Book</h4>
-      <p class="text-muted small mb-4">
-        You can only reserve books with <strong>0 available copies</strong>.
-        When a copy is returned, it will be placed on hold for you for 7 days.
-      </p>
-
-      <form method="POST" action="{{ url_for('reserve') }}">
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Book ISBN <span class="text-danger">*</span></label>
-          <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
-            <input type="text" name="isbn" class="form-control"
-                   placeholder="e.g. 978-0-13-468599-1"
-                   required autofocus autocomplete="off">
-          </div>
-          <div class="form-text">Browse the <a href="{{ url_for('index') }}">Catalogue</a> to find books.</div>
-        </div>
-
-        <button type="submit" class="btn btn-lis-primary w-100 mt-3">
-          <i class="bi bi-bookmark-check me-1"></i>Place Reservation
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- My Active Reservations List -->
-  <div class="col-lg-7">
-    <div class="card shadow-sm p-4 bg-white h-100">
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="fw-bold mb-0"><i class="bi bi-clock-history text-warning me-2"></i>My Active Reservations</h4>
-        <span class="badge bg-secondary">{{ active_reservations|length if active_reservations else 0 }}</span>
-      </div>
-
-      {% if active_reservations %}
-      <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-          <thead class="table-dark">
-            <tr>
-              <th>Book Title</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Hold Deadline</th>
-              <th class="text-end">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for r in active_reservations %}
-            <tr>
-              <td>
-                <div class="fw-semibold">{{ r.book.title if r.book else r.book_isbn }}</div>
-                <small class="text-muted"><code>{{ r.book_isbn }}</code></small>
-              </td>
-              <td>
-                {% if r.status == 'Hold' %}
-                  <span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>On Hold</span>
-                {% else %}
-                  <span class="badge bg-info text-dark"><i class="bi bi-hourglass-split me-1"></i>Waiting</span>
-                {% endif %}
-              </td>
-              <td class="small">{{ r.reservation_date.strftime('%d %b %Y') }}</td>
-              <td>
-                {% if r.status == 'Hold' and r.hold_until %}
-                  <strong class="text-danger small">{{ r.hold_until.strftime('%d %b %Y') }}</strong>
-                  {% set days_left = (r.hold_until - today).days %}
-                  <span class="badge bg-light text-dark border ms-1">{{ days_left }}d left</span>
-                {% else %}
-                  <span class="text-muted small">In line</span>
-                {% endif %}
-              </td>
-              <td class="text-end">
-                <form method="POST" action="{{ url_for('reservations_cancel') }}" onsubmit="return confirm('Are you sure you want to cancel this reservation?')">
-                  <input type="hidden" name="reservation_id" value="{{ r.id }}">
-                  <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-x-circle me-1"></i>Cancel
-                  </button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="text-center py-4 text-muted">
-        <i class="bi bi-bookmark display-6 d-block mb-2 text-muted"></i>
-        <p class="mb-0">You have no active reservations.</p>
-        <small>When you reserve a book, it will appear here with its hold status.</small>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-</div>
+{% block extra_head %}
+<style>
+  .reserve-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; padding: 24px; margin-bottom: 24px; }
+  .reserve-bar h2 { margin: 0 0 4px; }
+  .reserve-bar form { display: flex; gap: 8px; align-items: flex-start; }
+  .reserve-bar .field-wrap { width: 340px; }
+  .res { display: grid; grid-template-columns: minmax(0, 2fr) 150px minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .res:last-child { border-bottom: 0; }
+  .res .when b { display: block; color: var(--ink); font-weight: 600; }
+  .res .when span { font-size: .82rem; color: var(--muted); }
+  .res .when.urgent b { color: var(--late); }
+  .res-empty { border: 0; border-radius: 0; min-height: calc(100vh - 400px); }
+  @media (max-width: 991.98px) {
+    .reserve-bar { grid-template-columns: 1fr; }
+    .reserve-bar .field-wrap { width: auto; flex: 1; }
+    .res { grid-template-columns: 1fr auto; }
+    .res .when { grid-column: 1; }
+  }
+</style>
 {% endblock %}
 
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>My reservations</h1>
+    <p>Books you're waiting for, and books held for you to collect.</p>
+  </div>
+</div>
+
+<div class="panel reserve-bar">
+  <div>
+    <h2>Reserve a book</h2>
+    <p class="text-muted small mb-0">Only books that are out of stock can be reserved. You can also reserve straight from the <a href="{{ url_for('search') }}">catalogue</a>.</p>
+  </div>
+  <form method="POST" action="{{ url_for('reserve') }}" class="needs-validation" novalidate>
+    <div class="field-wrap">
+      <label class="visually-hidden" for="isbn">Book ISBN</label>
+      <input type="text" id="isbn" name="isbn" class="form-control form-control-lg mono"
+             placeholder="Book ISBN" required autocomplete="off" maxlength="32">
+      <div class="invalid-feedback">Enter the ISBN of the book you want.</div>
+    </div>
+    <button type="submit" class="btn btn-lis-primary btn-lg text-nowrap">Join the queue</button>
+  </form>
+</div>
+
+<div class="table-wrap">
+  <div class="panel-head">
+    <h2>Active reservations</h2>
+    <span class="count">{{ active_reservations|length if active_reservations else 0 }}</span>
+  </div>
+
+  {% if active_reservations %}
+    {% for r in active_reservations %}
+    <div class="res">
+      <div class="min-w-0">
+        <div class="cell-title">{{ r.book.title if r.book else r.book_isbn }}</div>
+        <div class="cell-sub"><code>{{ r.book_isbn }}</code>, reserved {{ r.reservation_date.strftime('%d %b %Y') }}</div>
+      </div>
+
+      <div>
+        {% if r.status == 'Hold' %}<span class="tag tag-warn">On hold for you</span>{% else %}<span class="tag tag-info">Waiting</span>{% endif %}
+      </div>
+
+      {% if r.status == 'Hold' and r.hold_until %}
+        {% set days_left = (r.hold_until - today).days %}
+        <div class="when {{ 'urgent' if days_left <= 1 }}">
+          <b>{% if days_left <= 0 %}Last day today{% elif days_left == 1 %}1 day left{% else %}{{ days_left }} days left{% endif %}</b>
+          <span>Collect from the desk by {{ r.hold_until.strftime('%d %b') }}</span>
+        </div>
+      {% else %}
+        <div class="when"><span>Waiting for a copy to come back</span></div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('reservations_cancel') }}"
+            data-confirm="You'll lose your place in the queue for “{{ r.book.title if r.book else r.book_isbn }}”." data-confirm-title="Cancel this reservation?" data-confirm-action="Cancel reservation">
+        <input type="hidden" name="reservation_id" value="{{ r.id }}">
+        <button type="submit" class="btn btn-sm btn-text-danger">Cancel</button>
+      </form>
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="empty-hero res-empty">
+    <div class="empty-hero-text">
+      <h2>No active reservations</h2>
+      <p>When a book you want is out of stock, reserve it and it shows up here.</p>
+      <a href="{{ url_for('search') }}" class="btn btn-quiet">Search the catalogue</a>
+    </div>
+    <div class="empty-hero-art" aria-hidden="true">
+      <img src="{{ url_for('static', filename='img/student.png') }}" alt="" width="760" height="695" style="object-position: 40% bottom">
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

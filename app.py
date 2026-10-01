@@ -5,7 +5,7 @@ from functools import wraps
 from dotenv import load_dotenv
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, abort, send_from_directory
+    url_for, session, flash, abort
 )
 from models import db, Member, Book, Issue, Reservation
 
@@ -25,29 +25,33 @@ database_url = (
     or os.environ.get("SUPABASE_DB_URL")
 )
 
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
 if database_url:
     # Normalize postgres:// prefix to postgresql://
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-    # If postgresql:// is provided without an explicit driver, ensure compatibility
-    if database_url.startswith("postgresql://") and not database_url.startswith("postgresql+"):
+    # Pick the installed PostgreSQL driver explicitly. A bare postgresql://
+    # makes SQLAlchemy look for psycopg2 even when only psycopg 3 is installed.
+    if database_url.startswith("postgresql://"):
         try:
-            import psycopg
+            import psycopg2  # noqa: F401
+            database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
         except ImportError:
-            try:
-                import psycopg2
-                database_url = database_url.replace("postgresql://", "postgresql+psycopg2://", 1)
-            except ImportError:
-                pass
+            database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
     app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    # Serverless hosts (Vercel) reuse idle connections; check them before use
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True, "pool_recycle": 280}
+elif os.environ.get("VERCEL"):
+    # Vercel's filesystem is read-only, so SQLite can't work there
+    raise RuntimeError(
+        "DATABASE_URL is not set. Add your Supabase connection string in "
+        "Vercel > Project > Settings > Environment Variables."
+    )
 else:
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'lis.db')}"
-
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -191,7 +195,7 @@ def inject_role():
 # ─────────────────────────────────────────────
 @app.route("/")
 def index():
-    return send_from_directory(BASE_DIR, "index.html")
+    return redirect(url_for("search") if get_session_role() else url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
