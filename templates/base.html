@@ -214,7 +214,13 @@
     .btn-text-danger { background: none; border: 1px solid transparent; color: var(--late); }
     .btn-text-danger:hover { background: var(--late-bg); color: var(--late); }
     .btn:disabled, .btn.disabled { opacity: .7; }
-    .btn .spinner-border { width: 1em; height: 1em; border-width: .15em; vertical-align: -0.15em; }
+    /* Bootstrap's disabled state swaps in its own colours; keep ours while a form is sending */
+    .btn-lis-primary:disabled, .btn-primary:disabled { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-danger:disabled { background: var(--late); border-color: var(--late); color: #fff; }
+    .btn-quiet:disabled { background: var(--surface); border-color: var(--line-2); color: var(--ink); }
+    .btn-text-danger:disabled { background: none; border-color: transparent; color: var(--late); }
+    .btn .spinner-border, .role .spinner-border { width: 1em; height: 1em; border-width: .15em; vertical-align: -0.15em; }
+    .role .spinner-border { color: var(--accent); }
 
     /* ── Status tags (text + tint; colour is never the only signal) ── */
     .tag { display: inline-block; padding: 2px 8px; border-radius: var(--r-sm); font-size: .8rem; font-weight: 500; white-space: nowrap; line-height: 1.5; }
@@ -664,7 +670,10 @@
       setTimeout(function () {
         form.querySelectorAll('button').forEach(function (b) { if (b.type === 'submit') b.disabled = true; });
         if (clicked && clicked.offsetParent !== null && !clicked.querySelector('.spinner-border')) {
-          clicked.insertAdjacentHTML('afterbegin', '<span class="spinner-border me-2" aria-hidden="true"></span>');
+          /* Buttons can mark where the spinner goes (e.g. the arrow on the sign-in cards) */
+          var slot = clicked.querySelector('[data-busy-slot]');
+          if (slot) slot.outerHTML = '<span class="spinner-border" aria-hidden="true"></span>';
+          else clicked.insertAdjacentHTML('afterbegin', '<span class="spinner-border me-2" aria-hidden="true"></span>');
         }
       }, 0);
     }
@@ -681,6 +690,7 @@
   window.addEventListener('pageshow', function (e) {
     if (!e.persisted) return;
     document.querySelectorAll('button:disabled').forEach(function (b) { b.disabled = false; });
+    document.querySelectorAll('.role .spinner-border').forEach(function (s) { s.outerHTML = '<i class="bi bi-arrow-right" aria-hidden="true" data-busy-slot></i>'; });
     document.querySelectorAll('.btn .spinner-border').forEach(function (s) { s.remove(); });
     document.querySelectorAll('form[data-confirmed]').forEach(function (f) { delete f.dataset.confirmed; });
   });
